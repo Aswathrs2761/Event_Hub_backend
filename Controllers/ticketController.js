@@ -530,7 +530,7 @@ export const getChartData = async (req, res) => {
 
 export const getUserNameAndEmail = async (req, res) => {
   try {
-     const userId = req.user._id;
+    const userId = req.user._id;
     const users = await userSchema.findById(userId).select("name email -_id");
     res.status(200).json({ data: users });
   } catch (error) {
