@@ -3,6 +3,7 @@ import ticket from "../Models/ticketSchema.js";
 import mongoose from "mongoose";
 import sendmail from "../Utils/mailer.js";
 import Stripe from "stripe";
+import userSchema from "../Models/userSchema.js";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -527,3 +528,12 @@ export const getChartData = async (req, res) => {
 };
 
 
+export const getUserNameAndEmail = async (req, res) => {
+  try {
+     const userId = req.user._id;
+    const users = await userSchema.findById(userId).select("name email -_id");
+    res.status(200).json({ data: users });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

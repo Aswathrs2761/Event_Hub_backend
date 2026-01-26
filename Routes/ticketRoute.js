@@ -1,7 +1,7 @@
 import express from "express";
 import { authMiddleware } from "../Middleswares/authMiddleware.js";
 import { createStripePayment } from "../Controllers/stripeController.js";
-import { buyTickets, getChartData, getEventsByOrganizer, getOrganizerTotal, getRecentSales, getTotalTicketsSold, getUserTickets, cancelTicket, suspendEvent, updateEvent, confirmTicket } from "../Controllers/ticketController.js";
+import { buyTickets, getChartData, getEventsByOrganizer, getOrganizerTotal, getRecentSales, getTotalTicketsSold, getUserTickets, cancelTicket, suspendEvent, updateEvent, confirmTicket, getUserNameAndEmail } from "../Controllers/ticketController.js";
 // import upload from "../Config/Multer.js";
 
 const router = express.Router();
@@ -18,6 +18,8 @@ router.patch("/suspend/:id", authMiddleware, suspendEvent);
 router.put("/edit-event/:id", authMiddleware,  updateEvent);
 router.get("/recent-sales", authMiddleware, getRecentSales);
 router.get("/chart-data", authMiddleware, getChartData);
+router.get("/users/detail", authMiddleware, getUserNameAndEmail);
+
 
 
 

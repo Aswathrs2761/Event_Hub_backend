@@ -48,4 +48,5 @@ adminRoute.get("/reports/revenue", getRevenueReport);
 adminRoute.get("/reports/event/:id", getEventPerformance);
 adminRoute.get("/reports/stats", getPlatformStats);
 
+
 export default adminRoute;
