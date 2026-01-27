@@ -175,7 +175,8 @@ export const cancelTicket = async (req, res) => {
       return res.status(400).json({ message: "Invalid ticket ID" });
     }
 
-    const ticketData = await ticket.findById(ticketId)
+    const ticketData = await ticket
+      .findById(ticketId)
       .populate("user", "name email")
       .populate("event", "eventtitle");
 
@@ -190,7 +191,9 @@ export const cancelTicket = async (req, res) => {
     }
 
     if (ticketData.status === "refunded") {
-      return res.status(400).json({ message: "Ticket has already been refunded" });
+      return res
+        .status(400)
+        .json({ message: "Ticket has already been refunded" });
     }
 
     if (ticketData.status !== "success") {
@@ -206,7 +209,9 @@ export const cancelTicket = async (req, res) => {
       });
 
       if (refund.status !== "succeeded") {
-        return res.status(400).json({ message: "Refund failed. Please try again." });
+        return res
+          .status(400)
+          .json({ message: "Refund failed. Please try again." });
       }
     } catch (stripeError) {
       console.error("Stripe Refund Error:", stripeError);
@@ -222,7 +227,7 @@ export const cancelTicket = async (req, res) => {
       { new: true }
     );
 
-    // 🔁 Restore quantities in the event for each ticket type
+    // Restore quantities
     for (const t of ticketData.tickets) {
       await organizer.findOneAndUpdate(
         {
@@ -249,11 +254,16 @@ The amount will be credited back to your original payment method within 5–7 bu
 Thank you!
 `;
 
-    await sendmail(
-      ticketData.user.email,
-      "Ticket Cancellation & Refund Confirmation",
-      refundMessage
-    );
+    // 🔒 Email must NOT break refund flow
+    try {
+      await sendmail(
+        ticketData.user.email,
+        "Ticket Cancellation & Refund Confirmation",
+        refundMessage
+      );
+    } catch (mailErr) {
+      console.log("Refund email skipped:", mailErr.message);
+    }
 
     res.status(200).json({
       message: "Ticket cancelled and refund processed successfully",
