@@ -149,7 +149,7 @@ export const cancelTicket = async (req, res) => {
     const ticketData = await ticket
       .findById(ticketId)
       .populate("user", "name email")
-      .populate("event", "eventtitle");
+      .populate("event", "_id eventtitle");
 
     if (!ticketData) {
       return res.status(404).json({ message: "Ticket not found" });
@@ -163,6 +163,7 @@ export const cancelTicket = async (req, res) => {
       return res.status(400).json({ message: "Ticket cannot be refunded" });
     }
 
+    // 🔴 Stripe refund
     const refund = await stripe.refunds.create({
       payment_intent: ticketData.paymentIntentId,
     });
@@ -171,16 +172,26 @@ export const cancelTicket = async (req, res) => {
       return res.status(400).json({ message: "Refund failed" });
     }
 
+    // Mark ticket as refunded
     const updatedTicket = await ticket.findByIdAndUpdate(
       ticketId,
       { status: "refunded" },
       { new: true }
     );
 
+    // Always use real event id
+    const eventId = ticketData.event._id;
+
+    // Restore only the exact ticket types that were purchased
     for (const t of ticketData.tickets) {
       await organizer.findOneAndUpdate(
-        { _id: ticketData.event, "tickets.ticketType": t.ticketType },
-        { $inc: { "tickets.$.quantity": t.quantity } }
+        {
+          _id: eventId,
+          "tickets.ticketType": t.ticketType,
+        },
+        {
+          $inc: { "tickets.$.quantity": t.quantity },
+        }
       );
     }
 
