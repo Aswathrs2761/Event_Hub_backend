@@ -73,12 +73,12 @@ export const confirmTicket = async (req, res) => {
       return res.status(400).json({ message: "Payment not completed" });
     }
 
-    // 2️⃣ Reduce quantity for the selected ticket type
+    // 2️⃣ Reduce quantity
     const updatedEvent = await organizer.findOneAndUpdate(
       {
         _id: eventId,
         "tickets.ticketType": ticketType,
-        "tickets.quantity": { $gte: qty }, // ensure enough tickets exist
+        "tickets.quantity": { $gte: qty },
       },
       {
         $inc: { "tickets.$.quantity": -qty },
@@ -121,15 +121,21 @@ Quantity: ${qty}
 Total Paid: ₹${totalAmount}
 `;
 
-    await sendmail(userEmail, "Ticket Booking Confirmation", message);
+    // 🔒 Do NOT let email failure break the API
+    try {
+      await sendmail(userEmail, "Ticket Booking Confirmation", message);
+    } catch (mailErr) {
+      console.log("Email skipped:", mailErr.message);
+    }
 
-    res.status(201).json({
+    // Always respond success
+    return res.status(201).json({
       message: "Ticket booked successfully",
       data: newTicket,
     });
   } catch (error) {
     console.error("CONFIRM TICKET ERROR:", error);
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
