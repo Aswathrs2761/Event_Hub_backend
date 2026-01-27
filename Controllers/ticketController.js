@@ -50,6 +50,8 @@ export const buyTickets = async (req, res) => {
 };
 
 
+// confirm Ticket Purchase
+
 
 export const confirmTicket = async (req, res) => {
   try {
@@ -67,22 +69,18 @@ export const confirmTicket = async (req, res) => {
     const qty = Number(quantity);
     const totalAmount = qty * price;
 
-    // 1️⃣ Verify payment
     const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
     if (pi.status !== "succeeded") {
       return res.status(400).json({ message: "Payment not completed" });
     }
 
-    // 2️⃣ Reduce quantity
     const updatedEvent = await organizer.findOneAndUpdate(
       {
         _id: eventId,
         "tickets.ticketType": ticketType,
         "tickets.quantity": { $gte: qty },
       },
-      {
-        $inc: { "tickets.$.quantity": -qty },
-      },
+      { $inc: { "tickets.$.quantity": -qty } },
       { new: true }
     );
 
@@ -92,7 +90,6 @@ export const confirmTicket = async (req, res) => {
       });
     }
 
-    // 3️⃣ Create ticket record
     const newTicket = await ticket.create({
       organizer: event.user,
       user: userId,
@@ -101,13 +98,7 @@ export const confirmTicket = async (req, res) => {
       paymentMethod: "stripe",
       status: "success",
       paymentIntentId,
-      tickets: [
-        {
-          ticketType,
-          quantity: qty,
-          price,
-        },
-      ],
+      tickets: [{ ticketType, quantity: qty, price }],
     });
 
     const message = `
@@ -121,23 +112,110 @@ Quantity: ${qty}
 Total Paid: ₹${totalAmount}
 `;
 
-    // 🔒 Do NOT let email failure break the API
-    try {
-      await sendmail(userEmail, "Ticket Booking Confirmation", message);
-    } catch (mailErr) {
-      console.log("Email skipped:", mailErr.message);
-    }
-
-    // Always respond success
-    return res.status(201).json({
+    // Respond immediately
+    res.status(201).json({
       message: "Ticket booked successfully",
       data: newTicket,
     });
+
+    // Send email in background
+    sendmail(userEmail, "Ticket Booking Confirmation", message)
+      .catch(err => console.log("Email skipped:", err.message));
+
   } catch (error) {
     console.error("CONFIRM TICKET ERROR:", error);
     return res.status(500).json({ message: error.message });
   }
 };
+
+
+
+
+
+
+// Cancel Ticket and Process Refund
+
+
+
+export const cancelTicket = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { ticketId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(ticketId)) {
+      return res.status(400).json({ message: "Invalid ticket ID" });
+    }
+
+    const ticketData = await ticket
+      .findById(ticketId)
+      .populate("user", "name email")
+      .populate("event", "eventtitle");
+
+    if (!ticketData) {
+      return res.status(404).json({ message: "Ticket not found" });
+    }
+
+    if (ticketData.user._id.toString() !== userId.toString()) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    if (ticketData.status !== "success") {
+      return res.status(400).json({ message: "Ticket cannot be refunded" });
+    }
+
+    const refund = await stripe.refunds.create({
+      payment_intent: ticketData.paymentIntentId,
+    });
+
+    if (refund.status !== "succeeded") {
+      return res.status(400).json({ message: "Refund failed" });
+    }
+
+    const updatedTicket = await ticket.findByIdAndUpdate(
+      ticketId,
+      { status: "refunded" },
+      { new: true }
+    );
+
+    for (const t of ticketData.tickets) {
+      await organizer.findOneAndUpdate(
+        { _id: ticketData.event, "tickets.ticketType": t.ticketType },
+        { $inc: { "tickets.$.quantity": t.quantity } }
+      );
+    }
+
+    const refundMessage = `
+Hi ${ticketData.user.name},
+
+Your ticket cancellation has been processed successfully!
+
+Event: ${ticketData.event.eventtitle}
+Refund Amount: ₹${ticketData.amount}
+`;
+
+    // Respond immediately
+    res.status(200).json({
+      message: "Ticket cancelled and refund processed successfully",
+      data: updatedTicket,
+    });
+
+    // Send email in background
+    sendmail(
+      ticketData.user.email,
+      "Ticket Cancellation & Refund Confirmation",
+      refundMessage
+    ).catch(err => console.log("Refund email skipped:", err.message));
+
+  } catch (error) {
+    console.error("CANCEL TICKET ERROR:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+
+
 
 
 
@@ -164,116 +242,8 @@ export const getUserTickets = async (req, res) => {
   }
 };
 
-// Cancel Ticket and Process Refund
 
-export const cancelTicket = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const { ticketId } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(ticketId)) {
-      return res.status(400).json({ message: "Invalid ticket ID" });
-    }
-
-    const ticketData = await ticket
-      .findById(ticketId)
-      .populate("user", "name email")
-      .populate("event", "eventtitle");
-
-    if (!ticketData) {
-      return res.status(404).json({ message: "Ticket not found" });
-    }
-
-    if (ticketData.user._id.toString() !== userId.toString()) {
-      return res
-        .status(403)
-        .json({ message: "Unauthorized: This ticket doesn't belong to you" });
-    }
-
-    if (ticketData.status === "refunded") {
-      return res
-        .status(400)
-        .json({ message: "Ticket has already been refunded" });
-    }
-
-    if (ticketData.status !== "success") {
-      return res
-        .status(400)
-        .json({ message: "Can only refund successfully purchased tickets" });
-    }
-
-    // 🔴 Stripe refund
-    try {
-      const refund = await stripe.refunds.create({
-        payment_intent: ticketData.paymentIntentId,
-      });
-
-      if (refund.status !== "succeeded") {
-        return res
-          .status(400)
-          .json({ message: "Refund failed. Please try again." });
-      }
-    } catch (stripeError) {
-      console.error("Stripe Refund Error:", stripeError);
-      return res
-        .status(500)
-        .json({ message: "Refund processing failed: " + stripeError.message });
-    }
-
-    // Mark ticket as refunded
-    const updatedTicket = await ticket.findByIdAndUpdate(
-      ticketId,
-      { status: "refunded" },
-      { new: true }
-    );
-
-    // Restore quantities
-    for (const t of ticketData.tickets) {
-      await organizer.findOneAndUpdate(
-        {
-          _id: ticketData.event,
-          "tickets.ticketType": t.ticketType,
-        },
-        {
-          $inc: { "tickets.$.quantity": t.quantity },
-        }
-      );
-    }
-
-    const refundMessage = `
-Hi ${ticketData.user.name},
-
-Your ticket cancellation has been processed successfully!
-
-Event: ${ticketData.event.eventtitle}
-Refund Amount: ₹${ticketData.amount}
-Refund Status: Completed
-
-The amount will be credited back to your original payment method within 5–7 business days.
-
-Thank you!
-`;
-
-    // 🔒 Email must NOT break refund flow
-    try {
-      await sendmail(
-        ticketData.user.email,
-        "Ticket Cancellation & Refund Confirmation",
-        refundMessage
-      );
-    } catch (mailErr) {
-      console.log("Refund email skipped:", mailErr.message);
-    }
-
-    res.status(200).json({
-      message: "Ticket cancelled and refund processed successfully",
-      data: updatedTicket,
-    });
-  } catch (error) {
-    console.error("CANCEL TICKET ERROR:", error);
-    res.status(500).json({ message: error.message });
-  }
-};
 // Get Organizer Total Amount and Orders
 
 
