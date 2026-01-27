@@ -1,24 +1,25 @@
-import nodemailer from "nodemailer";
-
-const transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-});
+// Utils/mailer.js
+import fetch from "node-fetch";
 
 const sendmail = async (to, subject, text) => {
-  const mailOptions = {
-    from: process.env.MAIL_USER,
-    to,
-    subject,
-    text,
-  };
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "api-key": process.env.BREVO_API_KEY,
+    },
+    body: JSON.stringify({
+      sender: { email: process.env.MAIL_FROM },
+      to: [{ email: to }],
+      subject,
+      textContent: text,
+    }),
+  });
 
-  await transporter.sendMail(mailOptions);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err);
+  }
 };
 
 export default sendmail;
