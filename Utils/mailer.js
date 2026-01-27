@@ -1,25 +1,20 @@
-// Utils/mailer.js
-import fetch from "node-fetch";
+import nodemailer from "nodemailer";
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.MAIL_USER,
+    pass: process.env.MAIL_PASS,
+  },
+});
 
 const sendmail = async (to, subject, text) => {
-  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "api-key": process.env.BREVO_API_KEY,
-    },
-    body: JSON.stringify({
-      sender: { email: process.env.MAIL_FROM },
-      to: [{ email: to }],
-      subject,
-      textContent: text,
-    }),
+  await transporter.sendMail({
+    from: process.env.MAIL_USER,
+    to,
+    subject,
+    text,
   });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(err);
-  }
 };
 
 export default sendmail;
