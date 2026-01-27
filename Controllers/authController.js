@@ -14,26 +14,38 @@ if (!process.env.JWT_SECRET) {
 // Register
 
 export const register = async (req, res) => {
-    try {
-        const { name, email, password } = req.body
+  try {
+    const { name, email, password, role } = req.body;
 
-        const existingUser = await User.findOne({ email })
-        if (existingUser) {
-            return res.status(400).json({ message: " User Already Exists " })
-        }
+    // Allow only these roles
+    const allowedRoles = ["user", "admin", "organizer"];
+    const userRole = allowedRoles.includes(role) ? role : "user";
 
-        const hashedPassword = await bcrypt.hash(password, 10)
-
-        const user = new User({ name, email, password: hashedPassword, role: "user" })
-        await user.save()
-
-        res.status(200).json({ message: " Registered Successfully ", data: user })
-
-    } catch (error) {
-        console.log(error)
-        res.status(500).json({ message: error.message, error: " server Error " })
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "User Already Exists" });
     }
-}
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = new User({
+      name,
+      email,
+      password: hashedPassword,
+      role: userRole,
+    });
+
+    await user.save();
+
+    res.status(200).json({
+      message: "Registered Successfully",
+      data: user,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: error.message, error: "Server Error" });
+  }
+};
 
 
 // Login
