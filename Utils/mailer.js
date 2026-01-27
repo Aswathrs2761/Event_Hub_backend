@@ -4,20 +4,15 @@ const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
     user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
+    pass: process.env.MAIL_PASS, // Gmail App Password
   },
-});
-
-transporter.verify((err, success) => {
-  if (err) {
-    console.error("MAILER ERROR:", err.message);
-  } else {
-    console.log("Mailer ready");
-  }
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
 });
 
 const sendmail = async (to, subject, text) => {
-  await transporter.sendMail({
+  return transporter.sendMail({
     from: process.env.MAIL_USER,
     to,
     subject,
