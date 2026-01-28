@@ -228,9 +228,6 @@ Refund Amount: ₹${ticketData.amount}
 
 
 
-
-
-
 // Get User's Purchased Tickets
 
 export const getUserTickets = async (req, res) => {
