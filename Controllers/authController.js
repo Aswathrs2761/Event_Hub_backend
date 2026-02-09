@@ -104,7 +104,7 @@ export const forgotPassword = async (req, res) => {
 
             `Please click the link below to reset your password:
 
-            http://localhost:5173/reset-password/${user._id}/${token} 
+            https://eventhub-jade.vercel.app/reset-password/${user._id}/${token} 
 
             If you did not request a password reset, please ignore this email. Your account will remain secure.
 
